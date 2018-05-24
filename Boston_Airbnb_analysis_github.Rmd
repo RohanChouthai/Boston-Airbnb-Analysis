@@ -1,0 +1,955 @@
+---
+title: "Boston Airbnb analysis"
+author: "Rohan Chouthai"
+date: "April 22, 2018"
+output: github_document
+---
+
+
+
+
+SUMMARY:
+Boston is a major educational, business and tourist hub on the East Coast of US which attracts hundreds of thousands of visitors every year.
+
+Airbnb has become an integral part of the travel community and a great source of income for those fortunate enough to own a place that they can rent out. Naturally, there will be a spike in interest among the home owners to consider listing their house on Airbnb. But they'd surely be wondering, how much money is their place likely going to be worth on Airbnb? Similarly, the people who do own a house listed on Airbnb might want to improve the quality of their listing. They'd like to know what are some of the factors which influence the price of a listing? How important a part do the reviews play in a new customers mind and does it have an impact on the price of the listing? All this and more!!
+
+
+PHASES OF CRISP-DM:
+
+1. BUSINESS UNDERSTANDING:
+The aim of the project is to predict the Yield of a potential Airbnb listing by developing model(s) to define the impact of various parameters on listing prices in Boston. The project also goes on to fill the void in the analytics world by addressing ways to improve the listing price for those already having their places on Airbnb. 
+
+
+
+2. DATA UNDERSTANDING:
+
+Dataset: I chose this dataset from Kaggle (source: https://www.kaggle.com/airbnb/boston)[1]. This dataset is originally a part of Airbnb Inside. (source: http://insideairbnb.com/get-the-data.html).
+
+This Dataset consists of 3 individual datasets: Calendar, Listings and Reviews. I have combined the Listings and Reviews datasets at a later point in my project. I'd mostly be working with the Listings dataset.
+
+ a.IMPORTING THE DATA:
+
+First let us load all the three datasets into R.
+
+```{r}
+Calendar<- read.csv("C:/Users/rohan/Desktop/DMML/Boston AIr BNB/calendar.csv")
+
+Listings<- read.csv("C:/Users/rohan/Desktop/DMML/Boston AIr BNB/listings.csv")
+
+Reviews<-read.csv("C:/Users/rohan/Desktop/DMML/Boston AIr BNB/reviews.csv")
+
+```
+
+Let us check the dimensions of these datasets. 
+
+```{r}
+dim(Calendar)
+
+dim(Listings)
+
+dim(Reviews)
+```
+
+We can see that the Calendar dataset is the largest. It primarily deals with the historical availablity of the Listings. This is not the dataset I would be using for any of my analysis.
+
+The Listings dataset is of primary interest as it has a lot of information about the listings such as the number of rooms, beds, price of the listing etc. I will be using this dataset for my modelling.
+
+The Reviews dataset has reviews for all the listings by multiple users. I will be using this datset for the sentiment analysis. 
+
+
+a. EXPLORATORY DATA ANALYSIS:
+
+In a city as expensive as Boston, there is a lot of curiosity around which areas in Boston are the most expensive. The Listings dataset has a lot of information about the neighbourhood and the price of the listings therein. I will now explore which areas are the most expensive in Boston. 
+
+First, let us subset the columns we require for visualizing this. 
+
+
+```{r}
+suppressWarnings(library(tidyverse))
+
+Daily_Price<- Listings%>% select(host_since,host_location,host_response_time,host_acceptance_rate,host_is_superhost,neighbourhood_cleansed,is_location_exact,property_type,room_type,accommodates,bathrooms,bedrooms,beds,bed_type,price,security_deposit,minimum_nights,maximum_nights)
+dim(Daily_Price)
+
+
+```
+
+Now, let us explore the most expensive neighbourhoods. 
+
+```{r}
+suppressWarnings(library(ggplot2))
+
+Daily_Price$price<-as.integer(Daily_Price$price)
+
+
+Neighbourhoods<-Daily_Price%>% group_by(neighbourhood_cleansed)%>% summarise(Avg_price=mean(price))%>% arrange(desc(Avg_price))
+
+head(Neighbourhoods)
+```
+Looks like Hyde Park is the most expensive neighbourhood in Boston to be renting a bnb in. It costs a whopping $229 per night. Sure we now have the average price per neighbourhood. 
+
+Now, let us visualize the most expensive areas. 
+
+```{r}
+ggplot(Neighbourhoods)+geom_bar(mapping = aes(reorder(neighbourhood_cleansed,Avg_price),Avg_price,fill=Avg_price),stat = "identity")+coord_flip()+xlab("Neighbourhood")+ylab("Average Price")
+
+```
+
+We can easily see that North End seems to be the cheaper place to rent out an bnb in. But what do the people who have stayed here got to say about Northend? ( Sentiment analysis to follow in the last part)
+
+
+
+
+3.DATA PREPARATION:
+
+This stage will involve addressing the NA values and missing entries for the attributes in the dataset. The comments and reviews on the listings will also need cleansing for analysis. Any other data quality issues will be addressed upon diving deeper into the data exploration.
+
+The Listings dataset has various different kinds of variables with listing URL, host images etc. I will not be working with all the variables for building my model. Therefore, I have dealt with the Data Preparation stage when I have built the models as per the requirement of my models.
+
+
+PART A: AIRBNB DAILY RATE PREDICTION and HOST-SUPERHOST CLASSIFICATION
+
+4. MODELLING:
+
+Now let us build a regression model to predict the price of the housing per night. We will consider the Listings dataset since it has all the information about the individual listings. 
+
+Let us first get some sense of the Listings dataset. 
+
+```{r}
+dim(Listings)
+
+str(Listings)
+```
+
+
+We can see that the dataset has 95 attributes per listing. Many of those attributes we don't need to build our model. Let us, therefore, select the ones which we will be using and put them into a new dataframe. 
+
+
+a. PREDICTION MODELS
+
+
+Problem Statement:
+I will first build two prediction models to predict the price per day of the Airbnb listing in Boston. 
+
+I will be first selecting the features I believe are most likely going to affect the price. I will omit out the other columns for the purpose of this model. 
+
+
+```{r}
+
+suppressWarnings(library(tidyverse))
+
+
+Daily_Price<- Listings%>% select(host_since,host_location,host_response_time,host_acceptance_rate,host_is_superhost,neighbourhood_cleansed,is_location_exact,property_type,room_type,accommodates,bathrooms,bedrooms,beds,bed_type,price,security_deposit,minimum_nights,maximum_nights)
+dim(Daily_Price)
+
+```
+
+We have now selected 18 attributes we are going to be building our model on. These still are a lot of parameters to be building the model on. 
+
+
+Let us now see the type of variables we have in our dataframe. 
+
+```{r}
+str(Daily_Price)
+```
+
+We see our response variable price is a factor. We need to convert into a numeric value so that we can use it in the linear regression model.
+
+
+```{r}
+Daily_Price$price<-as.numeric(Daily_Price$price)
+
+```
+
+Now let us see if it is normally distributed. A regression model fits better with normally distributed response variable.
+
+
+
+```{r}
+
+hist(Daily_Price$price)
+```
+
+The figure shows a non normal distribution. We see that most of the listings are either too expensive or quite cheap. 
+
+Let us deal with that issue later.
+
+--DATA PREPARATION:
+
+First let us see if there are NA values in our dataset. 
+
+
+```{r}
+anyNA(Daily_Price)
+
+sum(complete.cases(Daily_Price))/nrow(Daily_Price)
+```
+
+
+There are NA values. However, 99% of the data is complete. That is a good start.
+
+Let us now find out where these NA values are. 
+
+```{r}
+sapply(Daily_Price,function(x) sum(is.na(x)))
+```
+
+We can see that there are NA values in Bathrooms, Bedrooms and Beds. We need to impute these values to get a correlation among these parameters and the daily price. 
+
+We will impute the NA values with mode of the respective parameters. We first need to check the class of Bathrooms, Bedrooms and Bed. We need it to be factor since we are going to impute it with mode.
+
+```{r}
+
+class(Daily_Price$bathrooms)
+class(Daily_Price$bedrooms)
+class(Daily_Price$beds)
+```
+
+We see that one of them is a character and others are integers. Let us convert them all into factors.
+
+```{r}
+Daily_Price$bathrooms<-as.factor(Daily_Price$bathrooms)
+Daily_Price$bedrooms<-as.factor(Daily_Price$bedrooms)
+Daily_Price$beds<-as.factor(Daily_Price$beds)
+class(Daily_Price$bedrooms)
+
+unique(Daily_Price$bedrooms)
+mode(Daily_Price$bedrooms)
+```
+
+Now, let us go ahead and do the imputation. 
+
+Let us start of by imputing the Bathrooms parameter. 
+
+First, let us write a function or calculating the mode. 
+
+```{r}
+modeVal<-function(x){
+  uniq_x<-unique(x)
+  uniq_x[which.max(tabulate(match(x,uniq_x)))]
+}
+```
+
+Now let us impute the Bathroom with mode.
+
+```{r}
+
+
+Mode_bathroom<-modeVal(Daily_Price$bathrooms)
+
+
+Daily_Price$bathrooms<-ifelse(is.na(Daily_Price$bathrooms),Mode_bathroom,Daily_Price$bathrooms)
+
+unique(Daily_Price$bathrooms)
+```
+
+We can see that we successfully imputed the NA values in the Bathrooms column. 
+
+Now, let us repeat the process for Bedrooms and Beds. 
+
+```{r}
+
+Mode_bedrooms<-modeVal(Daily_Price$bedrooms)
+
+Daily_Price$bedrooms<-ifelse(is.na(Daily_Price$bedrooms),Mode_bedrooms,Daily_Price$bedrooms)
+unique(Daily_Price$bedrooms)
+
+```
+
+Thus we have imputed the bedrooms as well. 
+
+
+Now, let us impute the beds. 
+
+```{r}
+Mode_beds<-modeVal(Daily_Price$beds)
+
+Daily_Price$beds<-ifelse(is.na(Daily_Price$beds),Mode_beds,Daily_Price$beds)
+unique(Daily_Price$beds)
+
+```
+
+We have now gotten rid of the NA values in the Beds column as well.
+
+Let us now confirm if there are any NA values anywhere in our dataframe. 
+
+```{r}
+anyNA(Daily_Price)
+```
+
+There are no more NA values left. 
+
+We have to develop a multiple regression model. Let us first convert our data into numeric values.  
+
+```{r}
+Daily<-as.data.frame(lapply(Daily_Price[,], as.numeric))
+
+str(Daily)
+```
+
+
+Let us now observe the correlation between our dependent variable and the independent variables.
+
+```{r}
+cor(Daily[,])
+```
+
+
+This is a lot of information. We can make a better sense of it by visualizing the information.
+
+Let us visualize the relationships between our dependent variable and the other variables.
+
+```{r}
+suppressWarnings(library(psych))
+
+pairs.panels(Daily[])
+```
+
+We can see that the plot isn't as clear. Let us use another type of visualization. 
+
+
+
+```{r}
+suppressWarnings(library(corrgram))
+
+Daily_price_coef<-cor(Daily[,])
+
+corrgram(Daily_price_coef,lower.panel = panel.shade,upper.panel = panel.pie)
+```
+
+
+We can see that there is a corellation between the price per night of the listing and the parameters we selected. 
+
+
+We can reduce this collinearity between the features by doing a Principle Componenet analysis. I will then build the models on the principle components which explain the maximum variance.  
+ 
+
+```{r}
+str(Daily)
+```
+
+We can see that we have 18 numeric variables which we have to build a model on. Since all the variables are numeric and since there obviously is quite a lot of correlation betweeen the variables.
+
+First, let us normalize the data. 
+
+```{r}
+normalize<-function(x){
+  (x-min(x))/(max(x)-min(x))
+}
+
+Daily_normalized<-as.data.frame(lapply(Daily, normalize))
+
+summary(Daily_normalized)
+```
+
+
+
+Let us make training and testing datasets of the model.
+
+```{r}
+suppressWarnings(library(caret))
+roompart<-createDataPartition(Daily_normalized$price,p=0.8,list = FALSE)
+
+Price_train<-Daily_normalized[roompart,]
+Price_test<-Daily_normalized[-roompart,]
+dim(Price_train)
+dim(Price_test)
+
+```
+
+Now let us do the PCA.[2]
+
+```{r}
+pca_dailyprice<-prcomp(Price_train,scale. = T)
+
+names(pca_dailyprice)
+```
+
+Thus we see that the 5 important features are now formed. Let us see what the output of the mean of variables.
+
+```{r}
+pca_dailyprice$center
+```
+
+Let us also check the SD of the variables.
+
+```{r}
+pca_dailyprice$sdev
+```
+
+Finally, let us check the principle component loading which is given by the rotation feature. 
+
+```{r}
+pca_dailyprice$rotation
+```
+
+
+Let us now plot the principal components. 
+
+```{r}
+biplot(pca_dailyprice,scale = 0)
+
+
+```
+
+Now, let us calculate the standard deviation of each principal component.
+```{r}
+SDv<-pca_dailyprice$sdev
+```
+
+Let us compute variance. 
+
+```{r}
+Var<-SDv^2
+```
+
+We still need to see the proportion of variance explained. 
+
+```{r}
+price_var<-Var/sum(Var)
+price_var[1:10]
+```
+
+We can see that the first principal component explains 17.5% variance. Second component explains 9.8% variance. But we still need to decide how many components to include. 
+
+We will build a scree plot to help us out. This plot will give us a decending order of values of variance. 
+
+```{r}
+plot(price_var,xlab = "Principal Component Daily Price",ylab = "Proportion of Variance Explained",type = "b")
+```
+
+We can see that 13 principal components explain about 95% of the variance in our data. Let us use the first 13 components for modelling.
+
+
+We will now add the training set with the principal components.
+
+```{r}
+data_train<-data.frame(Price_train$price,pca_dailyprice$x)
+```
+
+We are interested in getting the first 13 PCAs. 
+
+```{r}
+data_train<-data_train[,1:14]
+```
+
+
+It is important for us to do the same PCA transformations on both training and testing datasets otherwise they will have unequal variance and hence their vectors will show different directions. 
+
+Hence,now let us transform the test data into PCA. 
+
+```{r}
+data_test<-predict(pca_dailyprice,newdata = Price_test)
+data_test<-as.data.frame(data_test)
+```
+
+Again, let us select the 13 principal components,
+
+```{r}
+data_test<-data_test[,1:13]
+
+
+```
+
+
+LINEAR REGRESSION MODEL WITH PCA 
+
+Now let us build that regression model. 
+
+```{r}
+pca_lm<-lm(data_train$Price_train.price~.,data = data_train)
+```
+
+Now, let us predict the value. 
+
+```{r}
+lm_pred_price<-predict(pca_lm,data_test)
+```
+
+Let us see what the RMSE of our model is. 
+
+Let us write a function to calculate the Root Mean Squared error. 
+
+```{r}
+RMSE_fun<-function(Pred,TargetVar){
+Error<-Pred-TargetVar
+SqError<-Error^2
+MeanSqerror<-mean(SqError)
+RootMSE<-MeanSqerror^0.5
+return(RootMSE)
+RootMSE
+}
+
+```
+
+Let us see the RMSE.
+
+```{r}
+RMSE_fun(lm_pred_price,data_test)
+```
+
+
+
+
+Thus we used PCA to build the linear regression model. Using PCA helped in getting rid of the collinearity which existed in our 'independent'variables. By doing PCA we essentially extracted more information from a lower dimensional plane. 
+
+
+Cross Validation for Linear Regression Model:
+
+We can see that our dataset has some 3585 rows. It is not a huge dataset. In cases like these, one can use the same dataset for training and testing instead of making two separate datasets. However, when the linear regression model is trained and tested on the same data, there is often a risk of the model overfitting. To tackle this problem, we can use a technique called Cross Validation.
+
+We will consider our entire normalized dataframe to do the cross validation.
+
+
+Let us create 10 folds first.
+```{r}
+set.seed(123)
+folds<-createFolds(Daily_normalized$price,k=10)
+```
+
+Now, we will need to apply a series of similar steps to all the 10 folds. Essentially, every time one fold will act as the test dataset and the remaining 9 folds will be the training datasets.
+
+Since I have done a PCA and predicted the price, I will now use the entire Normalized dataset to do the cross validation. The idea here is to compare the RMSE of the Linear Regression model along with PCA and The Linear Regression Model with cross validation with all the independent variables included.
+
+I will use a function we developed for the Data Management and Processing course. This function will take the formula, data and the number of folds as its input. It will then use the crossv_kfold function from the modelr package to make folds of the data. Then, using mutate, it will join new columns to the dataframe with the folds. These columns will use the map function to apply the linear regression to each element of the vector. Ultimately, it will return the mean RMSE of all the folds as it's output. 
+
+```{r}
+suppressWarnings(library(modelr))
+
+cross_val<-function(formula,data,folds_num){
+  cvd<-crossv_kfold(data,folds_num)
+  cvd<-cvd%>%mutate(mod=map(train,~lm(formula,data = .)))%>% mutate(rmse=map2_dbl(mod,test,rmse))
+  c(cross_val_rmse=mean(cvd$rmse))
+  
+}
+
+```
+
+Now, let us use this function to do a 10 fold cross validation of our dataset.
+
+```{r}
+cross_val(price~.,Daily_normalized,10)
+```
+
+We can see that the RMSE of the model with PCA was lower than the model with cross validation. 
+
+
+
+
+
+
+
+
+RANDOM FOREST MODEL USING PCA
+
+I would like to build a price prediction model using the Random Forest algorithm and compare it with the Linear Regression model. 
+
+We already have done the PCA with our training and testing datasets. Let us use those dataframes for our Random Forest Model.
+
+Now let us try building a Random Forest Model and compare the results.
+
+```{r}
+suppressWarnings(library(randomForest))
+
+Randfor_Price_pca<-randomForest(data_train$Price_train.price~.,data = data_train,importance=TRUE)
+
+```
+
+Now, let us predict the Price using Random Forest. 
+
+```{r}
+RFPred_pca<-predict(Randfor_Price_pca,data_test)
+```
+
+And let us now calculate the RMSE. 
+
+```{r}
+RMSE_fun(RFPred_pca,data_test)
+```
+
+We see that the RMSE has decreased using Random Forest. Thus, the model prediction accuracy has increased using Random FOrest algorithm compared to Linear regression. 
+
+
+Cross Validation for Random Forest
+
+I will use the same function as above for cross validation. The only slight modification is that in the function, I will now use the Random Forest formula. 
+
+```{r}
+suppressWarnings(library(modelr))
+
+cross_val_rf<-function(formula,data,folds_num){
+  cvd<-crossv_kfold(data,folds_num)
+  cvd<-cvd%>%mutate(mod=map(train,~randomForest(formula,data = .)))%>% mutate(rmse=map2_dbl(mod,test,rmse))
+  c(cross_val_rmse=mean(cvd$rmse))
+  
+}
+
+```
+
+Now let us see the RMSE of our Random Forest with 10-fold cross validation.
+
+```{r}
+cross_val_rf(price~.,Daily_normalized,10)
+```
+
+Thus we can see that the RMSE of the cross validated Random forest model is the lowest with 0.24. This model is likely the best one for our prediction problem. 
+
+
+EVALUATING MODEL PERFORMANCE
+
+We saw 4 models for the prediction problem- Linear regression with PCA, Linear Regression with Cross Validation, Random Forest with PCA and Random Forest with cross validation. OUt of these 4, the rmse for the random forest model with cross validation was the lowest indicating that the model was the best among the lot.
+
+
+Thus, anyone who stays in Boston and wants to know how much their place is worth if they were to put it up on Airbnb can get to know the daily rate of their place with the help of the above models. This completes the Yeild prediction part of my project.
+
+
+I am also curious to find out who these 'Superhosts' are. Airbnb says these are highly experienced hosts who ofte have their place rented out. I will build the following classification models for this purpose. 
+
+CLASSIFICATION MODELS
+
+Problem statement: I want to classify the host as a superhost or a not. 
+Airbnb classifies the 'more experienced' hosts as superhosts. What I want to find out is who exactly gets classified as superhost. I will build a model to classify the host. 
+
+
+```{r}
+Host_info<- Listings%>% select(host_response_rate,host_response_time,host_is_superhost,host_neighbourhood,host_total_listings_count,neighbourhood_cleansed,room_type,accommodates,bathrooms,bedrooms,price,number_of_reviews,review_scores_rating,cancellation_policy,instant_bookable,reviews_per_month)
+
+
+str(Host_info)
+```
+
+
+We will first see if there are any NA values in our dataframe. 
+```{r}
+sapply(Host_info,function(x) sum(is.na(x)))
+```
+
+
+Now let us impute the NAs one by one. 
+
+Imputing Bathrooms by the mode. 
+```{r}
+
+
+Mode_bathroom<-modeVal(Host_info$bathrooms)
+
+
+Host_info$bathrooms<-ifelse(is.na(Host_info$bathrooms),Mode_bathroom,Host_info$bathrooms)
+
+unique(Host_info$bathrooms)
+```
+
+
+Imputing Bedrooms by the mode. 
+```{r}
+Mode_bedrooms<-modeVal(Host_info$bedrooms)
+
+Host_info$bedrooms<-ifelse(is.na(Host_info$bedrooms),Mode_bedrooms,Host_info$bedrooms)
+unique(Host_info$bedrooms)
+```
+
+
+Thus we have imputed the bedrooms as well. 
+
+
+Now, let us impute the beds. 
+
+```{r}
+Mode_beds<-modeVal(Host_info$bedrooms)
+
+Host_info$bedrooms<-ifelse(is.na(Host_info$bedrooms),Mode_beds,Host_info$bedrooms)
+unique(Host_info$bedrooms)
+
+```
+
+We have now gotten rid of the NA values in the Beds column as well.
+
+
+Now, let us impute the reviews_score_rating.
+
+```{r}
+Median_ratings<-median(Host_info$review_scores_rating,na.rm = TRUE)
+Host_info$review_scores_rating<-ifelse(is.na(Host_info$review_scores_rating),Median_ratings,Host_info$review_scores_rating)
+
+unique(Host_info$review_scores_rating)
+
+```
+
+Lastly, let us impute the reviews per month. 
+
+```{r}
+mean_reviews<-mean(Host_info$reviews_per_month,na.rm = TRUE)
+Host_info$reviews_per_month<-ifelse(is.na(Host_info$reviews_per_month),mean_reviews,Host_info$reviews_per_month)
+
+summary(Host_info$reviews_per_month)
+
+```
+
+
+Let us now confirm if there are any NA values anywhere in our dataframe. 
+
+```{r}
+anyNA(Host_info)
+
+```
+
+There are no more NA values left. 
+
+We have to develop a Support Vector Machine model to predict whether the host is superhost or not. Let us first convert our data into numeric values.  
+
+Let us write a function to normalize the data.
+
+```{r}
+normalize<-function(x){
+  (x-min(x))/(max(x)-min(x))
+}
+```
+
+To do so, let us first subset all the factor data into our dataframe. 
+```{r}
+suppressWarnings(library(ade4))
+
+Host_nom<-Host_info[c("host_response_rate","host_response_time","host_neighbourhood","neighbourhood_cleansed","room_type","bathrooms","instant_bookable","cancellation_policy")]
+converted_fact<-acm.disjonctif(Host_nom)
+converted_fact<-as.data.frame(lapply(converted_fact, normalize))
+```
+
+Now, let us store our numeric features in a dataframe. 
+```{r}
+
+Numeric_feat<-Host_info[c("host_total_listings_count","accommodates","bathrooms","bedrooms","price","number_of_reviews","review_scores_rating","reviews_per_month")]
+
+Numeric_feat$price<-as.numeric(Numeric_feat$price)
+
+Numeric_feat<-as.data.frame(lapply(Numeric_feat, normalize))
+```
+
+Finally let us convert our decision variable into factor.
+
+```{r}
+Dec_var<-as.factor(Host_info$host_is_superhost)
+```
+
+Now, let us make a dataframe with all the dummy variables, the numeric variables and our decision variable.
+
+```{r}
+Superhost<-cbind(converted_fact,Numeric_feat,Dec_var)
+
+
+```
+Let us now normalize the data. 
+
+```{r}
+
+
+Host_scaled<-as.data.frame(lapply(Superhost[,1:166], normalize))
+
+Superhost_final<-cbind(Host_scaled,Dec_var)
+
+
+```
+
+
+
+Let us now create Training and Testing datasets.
+
+```{r}
+set.seed(12345)
+suppressWarnings(library(caret))
+Hostpart<-createDataPartition(Superhost_final$Dec_var,p=0.8,list = FALSE)
+
+Superhost_train<-Superhost_final[Hostpart,]
+
+Superhost_test<-Superhost_final[-Hostpart,]
+
+
+dim(Superhost_train)
+dim(Superhost_test)
+
+```
+
+Let us now train the model on our training dataset.
+
+```{r}
+NeuModel<-train(Superhost_train[,-167],Superhost_train$Dec_var,method = "nnet",trControl = trainControl(method = "cv",number = 10))
+
+
+```
+
+
+Let us see what the model parameters are. 
+
+```{r}
+NeuModel
+```
+
+Now, let us test our model on the testing dataset.
+```{r}
+Pred_neural<-predict(NeuModel,Superhost_test)
+```
+
+Let us now see how well the model performed. 
+```{r}
+confusionMatrix(Pred_neural,Superhost_test$Dec_var)
+```
+
+Looks like the model performed very well indeed with a 89.94% accuracy. 
+
+
+
+
+Let us see how does a Random Forest perform for this data. 
+
+```{r}
+Randfor_host<-randomForest(Dec_var~.,data = Superhost_train,importance=TRUE)
+```
+
+Let us predict the values of our testing dataset. 
+
+```{r}
+RandomForest_pred_host<-predict(Randfor_host,Superhost_test)
+```
+
+Now, let us calculate the accuracy of the Random Forest model.
+
+```{r}
+confusionMatrix(RandomForest_pred_host,Superhost_test$Dec_var)
+```
+
+MODEL ENSEMBLE:
+
+Models are often ensembled, that is, combined together to make a more robust model out of it which has a better accuracy.[3]
+
+
+Let us start off by making a dataframe of all the predictions of our randomforest and neural net models. I will also include the decision variable in this dataframe.
+
+```{r}
+mod_list<-data.frame(Pred_neural,RandomForest_pred_host,Host=Superhost_test$Dec_var,stringsAsFactors = FALSE)
+
+```
+
+Now, let us train the model on the newly created dataframe. I will use the decision variable that I have already crated in that dataframe. 
+
+```{r}
+model_stack<-train(Host~.,data = mod_list,method="knn")
+
+stack_pred<-predict(model_stack,Superhost_test[,1:166])
+
+confusionMatrix(stack_pred,Superhost_test[,167])
+```
+
+EVALUATING MODEL PERFORMANCE
+
+We saw that the model performed quite well with a 91.89% accuracy. It is evident that Random Forest is better suited to our problem of classification since it has higher accuracy. The accuracy improved slightly when we used the model ensemble to solve the classification problem. 
+
+On the whole, it turns out that this classifier is more accurate in screening off the hosts which arent superhosts. The correct classification of hosts as being superhosts is less accurate.
+
+
+PART B: SENTIMENT ANALYSIS
+
+We saw in the Exploratory Data Analysis the most expensive neighbourhoods in Boston. But what did people who stayed there have to say about the neighbourhood? I want to explore the general sentiment of the neighbourhood and compare it with the average price paid for the listing in that neighbourhood. 
+
+I will use the Reviews dataset for this purpose. Then, after tokenizing the reviews per listing, I will join the price, neighbourhood and few other important columns from the Listings dataset. And then, I will proceed to analyze the sentiments and plot them for the neighbourhood. [4][5]
+
+
+Let us load the data in the Tidytext format.
+
+```{r}
+suppressWarnings(library(tidyr))
+suppressWarnings(library(tidytext))
+```
+
+
+We need our comments to be of character type. So I will first convert it into character and then unnest tokens by words. 
+```{r}
+ 
+Reviews$comments<-as.character(Reviews$comments)
+
+Reviews_words<-Reviews%>% select(listing_id,comments)%>%unnest_tokens(word,comments)
+```
+
+Now, let us remove all the stop words from our dataframe. 
+```{r}
+Reviews_words<-Reviews_words%>% anti_join(stop_words,by="word")
+```
+
+
+Positive and Negative sentiment per review:
+
+I now wish to see the overall sentiment for each neighbourhood. I will use the "Bing" sentiments for assigning a total positive and negative score to each listing, Basically, each word is matched with the Bing sentiments as falling in either positive or negative sentiment and then the number of positive and negative sentiments are counted. Ultimately, my mutating a new column called Sentiment which is the difference between the positive and negative word score for each listing, we get the overall sentiment. Lastly, I have grouped the listings by area. 
+
+```{r}
+Sentiment_reviews<-Reviews_words%>% inner_join(get_sentiments("bing"),by="word")%>% count(listing_id,sentiment)%>% spread(sentiment,n)%>% mutate(sentiment=positive-negative)
+
+Sentiment_reviews<-as.tibble(Sentiment_reviews)
+
+# Making sure I remove the NAs. 
+Sentiment_reviews$negative<-ifelse(Sentiment_reviews$negative %in% NA,0,Sentiment_reviews$negative)
+Sentiment_reviews$positive<-ifelse(Sentiment_reviews$positive %in% NA,0,Sentiment_reviews$positive)
+
+Sentiment_reviews$sentiment<-Sentiment_reviews$positive-Sentiment_reviews$negative
+
+Sentiment_reviews_top10<-Sentiment_reviews%>% arrange(desc(Sentiment_reviews$sentiment))%>% top_n(10)
+
+
+str(Sentiment_reviews)
+
+colnames(Sentiment_reviews)<-c("id","negative","positive","sentiment") # amking sure the primary key of the dataframe matches with the primary key of the Listings dataframe.
+
+```
+
+
+Let us determine how the sentiment is related to the average rating of the listing. I will join the Listings dataframe to the Sentiment_reviews dataframe so that we get information about all the listings we are analyzing sentiments for. 
+
+
+```{r}
+Sentiment_analysis<-Sentiment_reviews%>% left_join(Listings,by="id")
+
+head(Sentiment_analysis)
+```
+
+Now, let us select the neighbourhood and the price along with the sentiments.
+
+```{r}
+
+Sa<-Sentiment_analysis%>% group_by(neighbourhood_cleansed)%>% summarise(Sentiment=mean(sentiment),Price=mean(as.numeric(price)))
+
+head(Sa)
+```
+
+
+Now, let us plot the sentiment vs price.
+
+```{r}
+suppressWarnings(library(ggrepel))
+
+ggplot(data = Sa,mapping = aes(x=as.integer(Sa$Sentiment),y=as.integer(Sa$Price)))+geom_point(aes(color=neighbourhood_cleansed,size=(Price)))+xlab("Sentiment_score")+ylab("Price_per_day")+geom_text_repel(aes(x=as.integer(Sa$Sentiment),y=as.integer(Sa$Price), hjust = 1 ,label=ifelse(as.integer(Sa$Sentiment)>400,as.character(neighbourhood_cleansed),''))) + theme_bw() + theme(legend.position="none") + geom_text_repel(aes(as.integer(Sa$Sentiment),as.integer(Sa$Price) ,label=ifelse((as.integer(Sa$Sentiment) < 70),as.character(neighbourhood_cleansed),''))) + theme_bw() + theme(legend.position="none") 
+       
+```
+
+
+
+Thus, we can see that even if Hyde park neighbourhood is one of the most expensive, it's sentiment score isnt all that high. Longwood medical area, on the other hand has a high sentiment score as well as a high daily price. 
+
+Thus, I conclude the analysis of the Boston Airbnb. 
+
+
+MODEL DEPLOYMENT:
+
+I will be publishing a RPubs document of this project as a part of the deployment stage.
+
+Thus, we saw that the project followed all the stage of CRISP-DM and analyzed the Boston Airbnb. 
+
+
+
+References:
+[1]https://www.kaggle.com/airbnb/boston)
+
+[2]https://www.analyticsvidhya.com/blog/2016/03/practical-guide-principal-component-analysis-python/
+
+[3]https://www.analyticsvidhya.com/blog/2017/02/introduction-to-ensembling-along-with-implementation-in-r/
+
+[4]https://piazza-resources.s3.amazonaws.com/jc12zfeh6dh657/jezzh7djdamxs/13TextModels.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAJYEHEYWU6YRFEBEQ%2F20180420%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20180420T213215Z&X-Amz-Expires=10800&X-Amz-SignedHeaders=host&X-Amz-Security-Token=FQoDYXdzEPX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaDMLqsaofHQuVUS47WCK3A0jfik1ksFk6%2B1X7T2cHYN9p%2B5pS2dOdDO0XJvKFrNPLJjhqOrCBI%2FlFwFr%2FPFFJT87PWtH0qgyc9zueG%2FDH20SAIrptO%2B0i34YJOC2RDzU0M%2F7i%2BVE1F6m8J25f9dG7d61CbE4f6gR6GvAM9qLs5QSzHGqZ7AgNhymoqLIOXz1DuVN150uR0edxJFHH3tQjvXZ%2BLLGrSx2w%2B2S6wfxmHLgqsq0FQO8naw0R4w7Fl4HiHvqXXkH%2B9j4bUE5bn1XfZMHOUAT3tJkxZ1s29nnMUOO8fleBKUwNcKNR2kvmYVHZ8Q8QNWcpQW6Ybp6CZdU2QBzfxnuVBBws2U%2BuH5mDYDb3kM1zFiW2%2BwUI4%2BKmelCWvCENRxbNz34un%2FoBtOFS3UncE8PEM9bcPc%2B3iq1QZoF6kct5ObiEYgn6jkoeB%2FwuH2hXZlwzg00glCF6%2BbzFO0v0I6lXpW6Ujz%2FwKuz2axkiW%2Bp8yuImNkByGLRxSOOGmj05YxW1WFl8uEObbFoxStXY8MGgnOpcowTRWktP%2Bl1AjSy6NCnaGf8ABQ%2FL0fFFaSPyGAC7t8Ll2pyPzU13zZLEmGlePM4ospPp1gU%3D&X-Amz-Signature=f7828472afd7fde5eb832671f4a8fd924a97c78e16b354a239d08a34ca03f522
+
+[5]http://varianceexplained.org/r/yelp-sentiment/
+
+[6]Machine Learning with R (Second Edition) by Brett Lantz.
